@@ -258,6 +258,7 @@ mozc_cc_library(
         ":win32_dpi_util",
         ":win32_renderer_util",
         "//base:coordinates",
+        "//bazel/win32:advapi32",
         "//client:client_interface",
         "//protocol:candidate_window_cc_proto",
         "//protocol:commands_cc_proto",

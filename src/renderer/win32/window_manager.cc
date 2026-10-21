@@ -57,6 +57,39 @@ namespace {
 constexpr uint32_t kHideWindowDelay = 500;  // msec
 const POINT kInvalidMousePosition = {-65535, -65535};
 
+// Bits of the "UpsideDown" registry value, which selects the windows drawn
+// upside down when they are above the preedit.
+constexpr DWORD kUpsideDownSuggestion = 1;
+constexpr DWORD kUpsideDownPrediction = 2;
+constexpr DWORD kUpsideDownConversion = 4;
+constexpr DWORD kUpsideDownDefault =
+    kUpsideDownSuggestion | kUpsideDownPrediction | kUpsideDownConversion;
+
+// Reads HKCU\Software\MozcFork\UpsideDown. Returns the default value when it
+// is missing.
+DWORD GetUpsideDownSetting() {
+  DWORD value = kUpsideDownDefault;
+  DWORD size = sizeof(value);
+  if (::RegGetValueW(HKEY_CURRENT_USER, L"Software\\MozcFork", L"UpsideDown",
+                     RRF_RT_REG_DWORD, nullptr, &value,
+                     &size) != ERROR_SUCCESS) {
+    return kUpsideDownDefault;
+  }
+  return value;
+}
+
+bool IsUpsideDownEnabled(commands::Category category) {
+  const DWORD setting = GetUpsideDownSetting();
+  switch (category) {
+    case commands::SUGGESTION:
+      return (setting & kUpsideDownSuggestion) != 0;
+    case commands::PREDICTION:
+      return (setting & kUpsideDownPrediction) != 0;
+    default:
+      return (setting & kUpsideDownConversion) != 0;
+  }
+}
+
 }  // namespace
 
 WindowManager::WindowManager()
@@ -311,10 +344,11 @@ void WindowManager::UpdateLayout(const commands::RendererCommand& command) {
     }
 
     // When the window is above the preedit, draw it upside down so that the
-    // first candidate is the closest to the preedit. This applies to all
-    // categories (suggestion, prediction and conversion).
-    main_window_->SetUpsideDown(!vertical &&
-                                main_window_rect.Top() < preedit_rect.Top());
+    // first candidate is the closest to the preedit. Which categories are
+    // drawn upside down is chosen by the "UpsideDown" registry value.
+    main_window_->SetUpsideDown(
+        !vertical && main_window_rect.Top() < preedit_rect.Top() &&
+        IsUpsideDownEnabled(candidate_window.category()));
   }
 
   const DWORD set_windows_pos_flags = SWP_NOACTIVATE | SWP_SHOWWINDOW;
