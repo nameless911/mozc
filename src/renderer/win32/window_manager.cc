@@ -301,19 +301,20 @@ void WindowManager::UpdateLayout(const commands::RendererCommand& command) {
             new_target_point, preedit_rect, placement_size,
             main_window_zero_point, working_area, vertical);
 
-    // When the suggestion window is above the preedit, anchor its bottom to
-    // the preedit and draw it upside down so that the best candidate is the
-    // closest to the preedit.
-    bool upside_down = false;
     if (is_suggestion) {
-      upside_down = main_window_rect.Top() < preedit_rect.Top();
-      if (upside_down) {
+      // Anchor the bottom to the preedit when the window is above it.
+      if (main_window_rect.Top() < preedit_rect.Top()) {
         main_window_rect.origin.y =
             main_window_rect.Bottom() - main_window_size.height;
       }
       main_window_rect.size.height = main_window_size.height;
     }
-    main_window_->SetUpsideDown(upside_down);
+
+    // When the window is above the preedit, draw it upside down so that the
+    // first candidate is the closest to the preedit. This applies to all
+    // categories (suggestion, prediction and conversion).
+    main_window_->SetUpsideDown(!vertical &&
+                                main_window_rect.Top() < preedit_rect.Top());
   }
 
   const DWORD set_windows_pos_flags = SWP_NOACTIVATE | SWP_SHOWWINDOW;
