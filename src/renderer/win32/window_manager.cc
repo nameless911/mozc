@@ -281,10 +281,39 @@ void WindowManager::UpdateLayout(const commands::RendererCommand& command) {
     if (!vertical) {
       new_target_point.y = preedit_rect.Bottom();
     }
+    // The suggestion window grows and shrinks while typing, and WindowUtil
+    // flips it above the preedit only when it does not fit below. To keep it
+    // from jumping up and down, decide the side with the size of a full
+    // suggestion window instead of the current one.
+    const bool is_suggestion =
+        !vertical && candidate_window.category() == commands::SUGGESTION;
+    Size placement_size = main_window_size;
+    if (is_suggestion) {
+      constexpr int kMaxSuggestionRows = 3;
+      const int rows = candidate_window.candidate_size();
+      if (rows < kMaxSuggestionRows) {
+        placement_size.height += (kMaxSuggestionRows - rows) *
+                                 main_window_->GetFirstRowInClientCord().Height();
+      }
+    }
     main_window_rect =
         WindowUtil::GetWindowRectForMainWindowFromTargetPointAndPreedit(
-            new_target_point, preedit_rect, main_window_size,
+            new_target_point, preedit_rect, placement_size,
             main_window_zero_point, working_area, vertical);
+
+    // When the suggestion window is above the preedit, anchor its bottom to
+    // the preedit and draw it upside down so that the best candidate is the
+    // closest to the preedit.
+    bool upside_down = false;
+    if (is_suggestion) {
+      upside_down = main_window_rect.Top() < preedit_rect.Top();
+      if (upside_down) {
+        main_window_rect.origin.y =
+            main_window_rect.Bottom() - main_window_size.height;
+      }
+      main_window_rect.size.height = main_window_size.height;
+    }
+    main_window_->SetUpsideDown(upside_down);
   }
 
   const DWORD set_windows_pos_flags = SWP_NOACTIVATE | SWP_SHOWWINDOW;

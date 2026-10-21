@@ -329,7 +329,7 @@ void CandidateWindow::HandleMouseEvent(UINT nFlags, const CPoint& point,
     const commands::CandidateWindow::Candidate& candidate =
         candidate_window_->candidate(i);
 
-    const CRect rect = ToCRect(table_layout_->GetRowRect(i));
+    const CRect rect = ToCRect(FlipIfUpsideDown(table_layout_->GetRowRect(i)));
     if (rect.PtInRect(point)) {
       commands::SessionCommand command;
       if (close_candidatewindow) {
@@ -636,7 +636,8 @@ Rect CandidateWindow::GetSelectionRectInScreenCord() const {
       focused_array_index < candidate_window_->candidate_size()) {
     (void)candidate_window_->candidate(focused_array_index);
 
-    CRect rect = ToCRect(table_layout_->GetRowRect(focused_array_index));
+    CRect rect = ToCRect(
+        FlipIfUpsideDown(table_layout_->GetRowRect(focused_array_index)));
     ClientToScreen(&rect);
     return Rect(rect.left, rect.top, rect.Width(), rect.Height());
   }
@@ -654,7 +655,27 @@ Rect CandidateWindow::GetFirstRowInClientCord() const {
   DCHECK(table_layout_->IsLayoutFrozen()) << "Table layout is not frozen.";
   DCHECK_GT(table_layout_->number_of_rows(), 0)
       << "number of rows should be positive";
-  return table_layout_->GetRowRect(0);
+  return FlipIfUpsideDown(table_layout_->GetRowRect(0));
+}
+
+void CandidateWindow::SetUpsideDown(bool upside_down) {
+  if (upside_down_ == upside_down) {
+    return;
+  }
+  upside_down_ = upside_down;
+  if (m_hWnd != nullptr) {
+    Invalidate();
+  }
+}
+
+Rect CandidateWindow::FlipIfUpsideDown(Rect rect) const {
+  if (!upside_down_) {
+    return rect;
+  }
+  // Mirror vertically within the window so that the first row comes to the
+  // bottom and the footer comes to the top.
+  rect.origin.y = table_layout_->GetTotalSize().height - rect.Bottom();
+  return rect;
 }
 
 void CandidateWindow::DrawCells(HDC dc) {
@@ -676,7 +697,8 @@ void CandidateWindow::DrawCells(HDC dc) {
           candidate_window_->candidate(i);
       const std::wstring display_string =
           GetDisplayStringByColumn(candidate, column_type);
-      const Rect text_rect = table_layout_->GetCellRect(i, column_type);
+      const Rect text_rect =
+          FlipIfUpsideDown(table_layout_->GetCellRect(i, column_type));
       display_list.push_back(TextRenderingInfo(display_string, text_rect));
     }
     text_renderer_->RenderTextList(dc, display_list, font_type);
@@ -684,7 +706,8 @@ void CandidateWindow::DrawCells(HDC dc) {
 }
 
 void CandidateWindow::DrawVScrollBar(HDC dc) {
-  const Rect& vscroll_rect = table_layout_->GetVScrollBarRect();
+  const Rect vscroll_rect =
+      FlipIfUpsideDown(table_layout_->GetVScrollBarRect());
 
   if (!vscroll_rect.IsRectEmpty() && candidate_window_->candidate_size() > 0) {
     const int begin_index = candidate_window_->candidate(0).index();
@@ -697,8 +720,9 @@ void CandidateWindow::DrawVScrollBar(HDC dc) {
     FillSolidRect(dc, &background_crect,
                   ToColorRef(style_.scrollbar_background_color()));
 
-    const mozc::Rect& indicator_rect = table_layout_->GetVScrollIndicatorRect(
-        begin_index, end_index, candidates_total);
+    const mozc::Rect indicator_rect =
+        FlipIfUpsideDown(table_layout_->GetVScrollIndicatorRect(
+            begin_index, end_index, candidates_total));
 
     const CRect indicator_crect = ToCRect(indicator_rect);
     FillSolidRect(dc, &indicator_crect,
@@ -708,7 +732,8 @@ void CandidateWindow::DrawVScrollBar(HDC dc) {
 
 void CandidateWindow::DrawShortcutBackground(HDC dc) {
   if (table_layout_->number_of_columns() > 0) {
-    Rect shortcut_colmun_rect = table_layout_->GetColumnRect(0);
+    Rect shortcut_colmun_rect =
+        FlipIfUpsideDown(table_layout_->GetColumnRect(0));
     if (!shortcut_colmun_rect.IsRectEmpty()) {
       // Due to the mismatch of the implementation of the TableLayout class
       // and the design requiement, we have to *fix* the width and origin
@@ -727,7 +752,7 @@ void CandidateWindow::DrawShortcutBackground(HDC dc) {
 }
 
 void CandidateWindow::DrawFooter(HDC dc) {
-  const Rect& footer_rect = table_layout_->GetFooterRect();
+  const Rect footer_rect = FlipIfUpsideDown(table_layout_->GetFooterRect());
   if (!candidate_window_->has_footer() || footer_rect.IsRectEmpty()) {
     return;
   }
@@ -735,11 +760,14 @@ void CandidateWindow::DrawFooter(HDC dc) {
   const int footer_separator_height = style_.footer_border_colors_size();
 
   // DC pen is available in Windows 2000 and later.
+  // The separator faces the rows: at the top of the footer normally, and at
+  // the bottom of the footer when the window is upside down.
   {
     wil::unique_select_object prev_pen =
         wil::SelectObject(dc, static_cast<HPEN>(::GetStockObject(DC_PEN)));
-    for (size_t i = 0, y = footer_rect.Top(); i < footer_separator_height;
-         y++, i++) {
+    for (int i = 0; i < footer_separator_height; ++i) {
+      const int y =
+          upside_down_ ? footer_rect.Bottom() - 1 - i : footer_rect.Top() + i;
       ::SetDCPenColor(dc, ToColorRef(style_.footer_border_colors(i)));
       ::MoveToEx(dc, footer_rect.Left(), y, nullptr);
       ::LineTo(dc, footer_rect.Right(), y);
@@ -747,7 +775,9 @@ void CandidateWindow::DrawFooter(HDC dc) {
   }
 
   const Rect footer_content_rect(
-      footer_rect.Left(), footer_rect.Top() + footer_separator_height,
+      footer_rect.Left(),
+      upside_down_ ? footer_rect.Top()
+                   : footer_rect.Top() + footer_separator_height,
       footer_rect.Width(), footer_rect.Height() - footer_separator_height);
 
   // Draw gradient rect in the footer area
@@ -843,8 +873,8 @@ void CandidateWindow::DrawSelectedRect(HDC dc) {
       focused_array_index < candidate_window_->candidate_size()) {
     (void)candidate_window_->candidate(focused_array_index);
 
-    const CRect selected_rect =
-        ToCRect(table_layout_->GetRowRect(focused_array_index));
+    const CRect selected_rect = ToCRect(
+        FlipIfUpsideDown(table_layout_->GetRowRect(focused_array_index)));
     FillSolidRect(dc, &selected_rect,
                   ToColorRef(style_.focused_background_color()));
 
@@ -859,7 +889,7 @@ void CandidateWindow::DrawInformationIcon(HDC dc) {
   const double scale_factor = GetDPIScalingFactor(dpi_);
   for (size_t i = 0; i < candidate_window_->candidate_size(); ++i) {
     if (candidate_window_->candidate(i).has_information_id()) {
-      CRect rect = ToCRect(table_layout_->GetRowRect(i));
+      CRect rect = ToCRect(FlipIfUpsideDown(table_layout_->GetRowRect(i)));
       rect.left = rect.right - (6.0 * scale_factor);
       rect.right = rect.right - (2.0 * scale_factor);
       rect.top += (2.0 * scale_factor);

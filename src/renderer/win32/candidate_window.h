@@ -117,8 +117,16 @@ class CandidateWindow : public ATL::CWindowImpl<CandidateWindow, ATL::CWindow,
   Rect GetCandidateColumnInClientCord() const;
   Rect GetFirstRowInClientCord() const;
 
+  // When |upside_down| is true, the rows are drawn from the bottom (the first
+  // candidate at the bottom) and the footer is drawn at the top. This is used
+  // when the window is placed above the preedit.
+  void SetUpsideDown(bool upside_down);
+
  private:
   void DoPaint(HDC dc);
+
+  // Converts a rect from |table_layout_| according to |upside_down_|.
+  Rect FlipIfUpsideDown(Rect rect) const;
 
   void DrawCells(HDC dc);
   void DrawVScrollBar(HDC dc);
@@ -206,6 +214,7 @@ class CandidateWindow : public ATL::CWindowImpl<CandidateWindow, ATL::CWindow,
   int indicator_width_;
   bool metrics_changed_;
   bool mouse_moving_;
+  bool upside_down_ = false;
   RendererStyle style_;
 };
 
