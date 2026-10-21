@@ -83,9 +83,13 @@ jobs:
         shell: pwsh
         working-directory: .\src
         run: |
+          # build_tools/mozc_version.py only reads a plain number or a single
+          # variable name, so write the sum as a number.
           $path = 'version.bzl'
           $text = Get-Content $path -Raw
-          $new = $text -replace '(?m)^BUILD = BUILD_OSS\s*$', "BUILD = BUILD_OSS + $env:GITHUB_RUN_NUMBER"
+          if ($text -notmatch '(?m)^BUILD_OSS = (\d+)') { throw 'BUILD_OSS not found in version.bzl' }
+          $build = [int]$Matches[1] + [int]$env:GITHUB_RUN_NUMBER
+          $new = $text -replace '(?m)^BUILD = BUILD_OSS\s*$', "BUILD = $build"
           if ($new -eq $text) { throw 'BUILD line not found in version.bzl' }
           Set-Content $path $new -NoNewline
           Select-String -Path $path -Pattern '^BUILD'
