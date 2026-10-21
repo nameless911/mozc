@@ -76,6 +76,20 @@ jobs:
           restore-keys: |
             bazel-disk-${{ runner.os }}-${{ runner.arch }}-
 
+      # Raise the build number on every run so that the installer replaces the
+      # files of a previously installed build (files with the same version are
+      # not overwritten by Windows Installer).
+      - name: Bump build number
+        shell: pwsh
+        working-directory: .\src
+        run: |
+          $path = 'version.bzl'
+          $text = Get-Content $path -Raw
+          $new = $text -replace '(?m)^BUILD = BUILD_OSS\s*$', "BUILD = BUILD_OSS + $env:GITHUB_RUN_NUMBER"
+          if ($new -eq $text) { throw 'BUILD line not found in version.bzl' }
+          Set-Content $path $new -NoNewline
+          Select-String -Path $path -Pattern '^BUILD'
+
       - name: build artifacts
         shell: cmd
         working-directory: .\src
